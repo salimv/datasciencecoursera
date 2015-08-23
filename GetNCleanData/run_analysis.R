@@ -39,4 +39,4 @@ dataset_meanstd$subject <- dataset_sub$V1
 sum_tbl <- dataset_meanstd %>% group_by(subject, activity) %>% summarise_each(funs(mean))
 
 #output the table
-write.table(sum_tbl, file="tidy_sum_tbl", row.names=FALSE)
+write.table(sum_tbl, file="tidy_sum_tbl.txt", row.names=FALSE)
