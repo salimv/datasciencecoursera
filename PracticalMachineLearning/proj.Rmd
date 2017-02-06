@@ -1,0 +1,165 @@
+---
+title: "Practical Machine Learning Project"
+author: "Salim Virani"
+date: "Sunday, February 05, 2017"
+output: html_document
+---
+
+# Project  Summary
+The goal of this project is to predict the quality of exercise / personal activity performed by people, using data from the various metrics that wearble devices like Jawbone, Fitbit, etc. devices produce.
+
+This document outlines the process used to understand the data, train model and select the moddel that has the best expected prediction power. It also shows the prediction of the final model selected on the test data.
+
+
+# Review of data
+The data used by is this project is sourced from  http://groupware.les.inf.puc-rio.br/har. The data was created by a group of enthsiasts who measured and labelled data from their wearable device's accelerometers tied on their belt, forearm, arm, and dumbell. They performed the exercise with varying degrees of quality, or wellness, and gave a quality letter A thru E to each such instance of exercise. 
+
+The goal of this project is to use this labelled data to develop a model that would best predict the quiality of exercise in the future using data from the same set of accelerometers.
+
+We will first download this dataset and examine the contents of this data. The dataset has both a training and testing set. The testing set has 20 samples which the selected model will be applied on and the prediction results shown. 
+
+
+```{r cfg_sec, results='hide', message=FALSE, error=FALSE, warning=FALSE}
+#Libraries
+library(ggplot2)
+library(caret)
+
+# Set working directory
+setwd("~/Training/Data Science Signature Track/Practical Machine Learning")
+```
+
+The code below also includes the URL from where the dataset was downloaded for both the training and testing purposes.
+
+```{r cacheChunk, cache=TRUE}
+labelled_data_file <- "./data/pml-training.csv"
+pred_data_file <- "./data/pml-testing.csv"
+
+# Download the data file if not exists
+if (!file.exists("./data")) {
+  dir.create("./data")
+}
+if (!file.exists(labelled_data_file)) {
+  download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", train_data_file, "auto")  
+}
+if (!file.exists(pred_data_file)) {
+  download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", test_data_file, "auto")  
+}
+
+# Read the data file
+labelled_dat <- read.csv(labelled_data_file, stringsAsFactors=FALSE)
+pred_dat <- read.csv(pred_data_file, stringsAsFactors=FALSE)
+```
+
+The taining data has a total of 19622 rows with a 160 differet columns, one of which is the "classe" variable which is the prediction variable. The remaining 159 variables are all available to be selected as predictors. We also show a sample of the names of the predictors
+
+In the test dataset, we have 20 rows for which we need to predict the "classe" variable. This will indicate the quality of the exercise being done in these 20 cases.
+
+
+```{r}
+dim(labelled_dat)
+dim(pred_dat)
+head(names(labelled_dat),30)
+table(labelled_dat$class)
+```
+
+
+# Selection of predictors
+In order to select predictors, we take the approach to start with those that always have non-null values. Null values will reduce the available sample and some models cannot handle nulls.  A review of columns that are null vs non null show that there are few columns that are aggregates and hence they are usually null. Also, there are columns that are raw measurements and there are columns that are identifying information, timestamp, etc. Considering that the user name, timestamp, etc. play no role in the prediction of quality of exericse, we only select the raw measurements from the belt, arm, forearm and dumbell.
+
+
+```{r}
+# Look for missing values in test as those will not be possible predictors
+na_summary <- sapply(labelled_dat, function(x) sum((is.na(x) || (x==""))))
+non_na_cols <- names(na_summary[na_summary == 0])
+
+# Remove timestamp and other IDs from the data and keep only raw measurements
+predictors <- non_na_cols[grep("belt|arm|dumbbell|forearm",names(na_summary[na_summary == 0]))]
+
+# Get only the raw variables
+labelled_data_raw <- subset(labelled_dat, select=predictors)
+pred_data_raw <- subset(pred_dat, select=predictors)
+```
+
+
+# Creating training and testing datasets
+While we have been given training and testing datasets, inorder to create unbiased model and prevent overfitting, we partition the data stratified by the "classe" variable to create two random sets. One set, with about 80% of data from training set, that will be used as the model training set and the remaining 20% to be saved as testing set to compute the out of sample error rate.
+
+Also, for the purpose of cross validation while doing the training, we select repeated cross validation method using 10-k fold method repeating the process 3 times.
+
+
+```{r}
+#Crete testing and training data from the labelled dataset to compare model fitness
+set.seed(7000)
+in_train <- createDataPartition(y=labelled_dat$classe, p=0.8, list=FALSE)
+train_data_raw <- labelled_data_raw[in_train,]
+test_data_raw <- labelled_data_raw[-in_train,]
+train_data_raw$classe <- labelled_dat$classe[in_train]
+test_data_raw$classe <- labelled_dat$classe[-in_train]
+
+#Cross-validation scheme
+tr_ctrl <- trainControl(method="repeatedcv", number=10, repeats=3)
+```
+
+
+# Model training
+To find the best model to that will have the least out of sample error, we train 5 different models below. In each case, we take a 2 step approch. We first train the model using the cross-validation method described earlier. we then predict the classe variable on the 20% testing set. WE then compare the out of sample error rate using the accuracy metric of the confusion metric. 
+
+The code below shows 5 different algorithms used to train the model. Random forest algorithm is skipped in favor of boosting with trees as it tends to further improve over random forest.
+
+
+```{r modelConfig, cache=TRUE, results='hide', message=FALSE, error=FALSE, warning=FALSE}
+#Test various models
+modRpart <- train(classe ~ ., data=train_data_raw, method="rpart", trControl=tr_ctrl)
+predRpart <- predict(modRpart, test_data_raw)
+cmRpart <- confusionMatrix(predRpart, test_data_raw$classe)
+modelAccuracy <- data.frame(Rpart=cmRpart$overall)
+
+modLda <- train(classe ~ ., data=train_data_raw, method="lda", trControl=tr_ctrl)
+predLda <- predict(modLda, test_data_raw)
+cmLda <- confusionMatrix(predLda, test_data_raw$classe)
+modelAccuracy$Lda <- cmLda$overall
+
+modNb <- train(classe ~ ., data=train_data_raw, method="nb", trControl=tr_ctrl)
+predNb <- predict(modNb, test_data_raw)
+cmNb <- confusionMatrix(predNb, test_data_raw$classe)
+modelAccuracy$Nb <- cmNb$overall
+
+modGbm <- train(classe ~ ., data=train_data_raw, method="gbm", trControl=tr_ctrl)
+predGbm <- predict(modGbm, test_data_raw)
+cmGbm <- confusionMatrix(predGbm, test_data_raw$classe)
+modelAccuracy$Gbm <- cmGbm$overall
+
+modC50 <- train(classe ~ ., data=train_data_raw, method="C5.0", trControl=tr_ctrl)
+predC50 <- predict(modC50, test_data_raw)
+cmC50 <- confusionMatrix(predC50, test_data_raw$classe)
+modelAccuracy$C50 <- cmC50$overall
+```
+
+
+# Model evaluation and selection
+
+Examination of the various models shows that the C50 is the most superior algorithm followed by boosting using trees. Other models show accuracy of less than 75%. Out of sample error for C50 classifier and Boosting using trees (Gbm) is 0.4% and 3.7% respectively.
+
+Based on this we select the C50 trained model as our final model.
+
+
+```{r}
+accuDF <- data.frame(t(modelAccuracy))
+g <- ggplot(accuDF, aes(x=rownames(accuDF), y=Accuracy, fill=rownames(accuDF)))
+g <- g + geom_bar(stat="identity", width=0.5)
+g <- g + labs(title="Accuracy of models on test dataset", x="Model", y="Accuracy", fill="Model")
+g
+print(modelAccuracy)
+```
+
+
+# Prediction on test data
+
+Using the C50 trained model, the following are the predicted values of the classe variable for the 20 test cases.
+
+```{r finalPrediction, results='hide', message=FALSE, error=FALSE, warning=FALSE}
+predTest <- predict(modC50, pred_data_raw)
+```
+```{r}
+print(predTest)
+```
