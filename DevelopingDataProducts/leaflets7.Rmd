@@ -1,0 +1,23 @@
+---
+title: "Leaflet Test"
+author: "Salim Virani"
+date: "Monday, February 20, 2017"
+output: html_document
+---
+
+This markdown document shows plots the hospitals in the california area.
+
+This code first downloads the data and subsets it to make it ready to plot
+```{r data, cache=TRUE}
+library(leaflet)
+hospitalData <- read.csv("https://chhs.data.ca.gov/api/views/ir29-xyw6/rows.csv?accessType=DOWNLOAD")
+hospitalMapData <- data.frame(name=hospitalData$FACNAME, lat=hospitalData$LATITUDE, lng=hospitalData$LONGITUDE)
+```
+
+## Map of California hospitals
+This code first downloads the data and subsets it to make it ready to plot
+```{r}
+hospitalMapData %>% leaflet() %>% addTiles() %>% addMarkers(clusterOptions = markerClusterOptions(), popup=~name)
+```
+
+
