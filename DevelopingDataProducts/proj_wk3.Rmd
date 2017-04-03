@@ -1,0 +1,35 @@
+---
+title: "Plotly Example"
+author: "Salim Virani"
+date: "Sunday, April 2, 2017"
+output: html_document
+---
+  
+This markdown document shows plots the hospitals in the california area.
+
+This code first downloads the data and subsets it to make it ready to plot
+
+```{r data, cache=TRUE,warning=FALSE}
+library(plotly)
+#Dowlonad the dataset
+hospitalData <- read.csv("https://chhs.data.ca.gov/api/views/ir29-xyw6/rows.csv?accessType=DOWNLOAD")
+
+#Create the data frame
+hospitalMapData <- data.frame(name=hospitalData$FACNAME, lat=hospitalData$LATITUDE, lng=hospitalData$LONGITUDE)
+```
+
+## Map of California hospitals
+This code first sets the map options. Then it plots the hospital locations in California. 
+  
+```{r, warning=FALSE}
+map_options <- list(
+  scope = 'usa',
+  projection = list(type='albers usa'),
+  lonaxis = list(range = range(hospitalMapData$lng, na.rm=TRUE)),
+  lataxis = list(range = range(hospitalMapData$lat, na.rm=TRUE))
+)  
+
+plot_geo(hospitalMapData, lat=~lat, lon=~lng) %>% 
+  add_markers(text=~name, hoverinfo="text", ) %>% 
+  layout(title="Hospitals in California", geo=map_options)
+```
